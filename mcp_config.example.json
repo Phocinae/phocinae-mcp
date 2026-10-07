@@ -1,0 +1,27 @@
+{
+  "_comment": "phocinae-mcp 客户端接入配置示例：Cline/Windsurf 用 mcpServers；Zed 用 context_servers；Codex CLI 见 README（config.toml）。",
+  "mcpServers": {
+    "phocinae": {
+      "command": "python3",
+      "args": [
+        "-m", "phocinae_mcp",
+        "--server", "http://127.0.0.1:8155"
+      ],
+      "env": {
+        "PHOCINAE_MCP_L1_ENABLED": "0",
+        "PHOCINAE_MCP_TIMEOUT": "5"
+      }
+    }
+  },
+  "context_servers": {
+    "phocinae": {
+      "command": {
+        "path": "python3",
+        "args": [
+          "-m", "phocinae_mcp",
+          "--server", "http://127.0.0.1:8155"
+        ]
+      }
+    }
+  }
+}

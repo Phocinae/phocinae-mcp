@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.phocinae-guard.audit.jsonl
+phocinae-guard.audit.jsonl
