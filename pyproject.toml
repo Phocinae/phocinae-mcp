@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phocinae-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "斑海豹 Phocinae MCP stdio server：命令审批 gate + classify/route/score 推理工具（纯标准库）"
 readme = "README.md"
 requires-python = ">=3.8"
