@@ -1,5 +1,7 @@
 # phocinae-mcp
 
+<!-- mcp-name: io.github.Phocinae/phocinae-mcp -->
+
 斑海豹（Phocinae）审批/推理能力的 **MCP stdio server**：把 `phocinae-guard` 的命令审批门（gate）和斑海豹 P0 推理协议（classify / route / score）暴露成 MCP 工具，接入 Cline / Windsurf / Zed / Codex CLI 等仅支持 MCP 的编码代理。
 
 - 纯标准库（Python ≥ 3.8），零第三方依赖；MCP 协议为手写 JSON-RPC 2.0 stdio 实现。
@@ -36,7 +38,7 @@ noul=bool、choice=int 下标、score=2–10。应答兼容扁平值与旧 mock 
 
 ```bash
 cd phocinae-mcp
-python3 -m phocinae_mcp --version          # phocinae-mcp 0.1.0
+python3 -m phocinae_mcp --version          # phocinae-mcp 0.1.4
 pip install -e .                            # 可选：提供 phocinae-mcp 命令
 ```
 

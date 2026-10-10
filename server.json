@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Phocinae/phocinae-mcp",
+  "title": "Phocinae MCP",
+  "description": "Local Phocinae decision-engine MCP stdio server: fail-closed approval gate + classify/route/score.",
+  "repository": {
+    "url": "https://github.com/Phocinae/phocinae-mcp",
+    "source": "github"
+  },
+  "version": "0.1.4",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "phocinae-mcp",
+      "version": "0.1.4",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
