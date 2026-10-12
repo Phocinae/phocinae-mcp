@@ -19,6 +19,15 @@ FROM python:3.12-slim
 
 # Pin the release so a directory check months from now tests the same artifact.
 ARG PHOCINAE_MCP_VERSION=0.2.2
+# Package index. Defaults to PyPI, which is what a directory check wants: it
+# resolves the same artifact every other user gets. Override it when PyPI's file
+# CDN is unreachable from the build host — which is a real situation, not a
+# hypothetical: on the authoring network `pypi.org/simple/` answers but
+# `files.pythonhosted.org` is blackholed, so the download step hangs or fails
+# while the index itself looks healthy.
+#
+#   docker build --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple .
+ARG PIP_INDEX_URL=https://pypi.org/simple
 # Point the server at a host-side decision service when one is available.
 # 127.0.0.1 is the documented default and is correct for a local client that
 # runs the server as a subprocess; inside a container that address is the
@@ -33,7 +42,9 @@ ENV PHOCINAE_MCP_SERVER=http://127.0.0.1:8155 \
     PYTHONUTF8=1 \
     PYTHONIOENCODING=utf-8
 
-RUN pip install --no-cache-dir "phocinae-mcp==${PHOCINAE_MCP_VERSION}"
+RUN pip install --no-cache-dir --index-url "${PIP_INDEX_URL}" \
+        --retries 5 --timeout 30 "phocinae-mcp==${PHOCINAE_MCP_VERSION}" \
+    && python -c "import phocinae_mcp, sys; sys.stderr.write('phocinae-mcp %s installed\n' % phocinae_mcp.__version__)"
 
 # The package ships no non-root user; drop privileges explicitly. A read-only
 # stdio server needs no writable path at all.
