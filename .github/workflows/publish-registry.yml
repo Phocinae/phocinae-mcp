@@ -65,29 +65,25 @@ jobs:
       - name: Publish to the MCP Registry
         run: |
           set -euo pipefail
-          name="$(python -c "import json;print(json.load(open('server.json'))['name'])")"
-          version="$(python -c "import json;print(json.load(open('server.json'))['version'])")"
-
           # Idempotency: a version can only be published once, so re-running this
           # workflow (a re-pushed tag, or a manual dispatch after a fix) would
           # otherwise fail with "invalid version: cannot publish duplicate
           # version" even though the registry already holds exactly what we want.
           # That is a satisfied precondition, not an error.
-          if curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=${name}" \
-             | python -c "
-import json,sys
-want_name = '''${name}'''
-want_version = '''${version}'''
-d = json.load(sys.stdin)
-hit = any(s.get('server',{}).get('name') == want_name
-          and s.get('server',{}).get('version') == want_version
-          for s in d.get('servers', []))
-sys.exit(0 if hit else 1)
-"; then
-            echo "${name} ${version} is already on the registry; nothing to publish"
+          name="$(python -c "import json;print(json.load(open('server.json'))['name'])")"
+          version="$(python -c "import json;print(json.load(open('server.json'))['version'])")"
+          # Exit codes: 0 already present (skip), 1 absent (publish),
+          # 2 query failed -> treat as unknown and let the publish decide, since
+          # the registry's own 400 on a duplicate is the authoritative answer.
+          status=0
+          python scripts/registry_entry_exists.py "$name" "$version" || status=$?
+          if [ "$status" = "0" ]; then
+            echo "nothing to publish"
             exit 0
           fi
-
+          if [ "$status" = "2" ]; then
+            echo "registry query inconclusive; attempting the publish anyway"
+          fi
           ./mcp-publisher login github-oidc
           ./mcp-publisher publish server.json
 
