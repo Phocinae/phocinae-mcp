@@ -80,7 +80,7 @@ class Checks:
     def write(self):
         with open(SMOKE_PATH, "w", encoding="utf-8") as fh:
             fh.write("phocinae-mcp Streamable HTTP 冒烟（MCP %s）\n" % VERSION)
-            fh.write("时间：%s\n" % time.strftime("%Y-%m-%d %H:%M:%S"))
+            fh.write("生成：每次运行重新生成（时间戳刻意不写入）\n")
             fh.write("=" * 72 + "\n\n")
             fh.write("\n".join(self.entries))
             fh.write("\n\n" + "=" * 72 + "\n")
@@ -191,7 +191,7 @@ def main():
     try:
         port = wait_port(proc)
         hc = HttpClient("http://127.0.0.1:%d" % port)
-        ck.check("H0 HTTP 服务启动", True, "port=%d" % port)
+        ck.check("H0 HTTP 服务启动", True, "port=<PORT>（内核分配，不写入真实端口）")
 
         # ---- 正常路径
         st, obj, _ = hc.post("server/discover", _with_meta({}), rid=1)

@@ -15,9 +15,11 @@
 退出码：全过 0；任一失败 1。
 """
 
+import base64
 import json
 import os
 import queue
+import re
 import subprocess
 import tempfile
 import sys
@@ -52,6 +54,88 @@ _force_utf8_stdio()
 
 SMOKE_PATH = os.path.join(HERE, "mcp_smoke.txt")
 
+# 临时端口脱敏。这个 transcript 被 git 跟踪，而 mock 服务绑的是内核分配的临时端口
+# （127.0.0.1:51269 每次不同），不脱敏则每次运行都产生假 diff —— 真正的断言变化会被
+# 这些噪音淹没，而"看出这次和上次比变了什么"正是这个文件存在的理由。
+#
+# 两处要处理，第二处是踩过才知道的：
+#   1. 明文  http://127.0.0.1:51269
+#   2. base64 —— gate 的 requestState 字段把整个请求（含 mock 地址）base64 之后
+#      放在 payload 里，明文替换碰不到它，于是只修了第 1 处仍然每次变化。
+_EPHEMERAL_PORTS = set()
+_PORT_RE = re.compile(r"127\.0\.0\.1:(\d{4,5})")
+# base64**url**（含 - 与 _，无 padding）—— 不是标准 base64。第一次我把这里写成标准
+# 字母表，于是那个含 mock 地址的片段永远匹配不上：脱敏看起来生效了，实际没生效。
+_B64_RUN = re.compile(r"[A-Za-z0-9+/_-]{40,}={0,2}")
+
+
+def _note_port(url):
+    """记录本次运行用到的临时端口，供 transcript 脱敏。"""
+    m = _PORT_RE.search(url or "")
+    if m:
+        _EPHEMERAL_PORTS.add(m.group(1))
+    return url
+
+
+# gate 的确认令牌：`<base64url 载荷>.<64 位十六进制签名>`。载荷里有 exp（签发时刻
+# +秒数），签名是 HMAC —— 每次运行必然不同。这是第三处噪音源，前两处（明文端口、
+# base64url 里的端口）修完之后它才露出来。
+# 注意不是标准 JWT：只有两段，且签名段是十六进制而非 base64url —— 我第一版按三段
+# JWT 写，于是它一个都没匹配上。
+#
+# 末尾用 `(?![0-9a-f])` 而不是 `\b`：签名后面常常紧跟更多十六进制字符（令牌后面还
+# 接着别的字段），而 `\b` 在"十六进制字符 → 十六进制字符"之间**不成立**，于是令牌
+# 被整段漏掉。用否定前瞻只要求"这里不再是签名的一部分"。
+_TOKEN = re.compile(r"eyJ[A-Za-z0-9_\-]{40,}\.[0-9a-f]{32,}(?![0-9a-f])")
+
+
+def _redact_token(text):
+    return _TOKEN.sub("<TOKEN payload=... sig=...>", text)
+
+
+def _redact_b64_runs(text):
+    """把 base64url 片段里编码的临时端口也换掉（解码 → 替换 → 原样重新编码）。"""
+    if not _EPHEMERAL_PORTS:
+        return text
+
+    def repl(m):
+        t = m.group(0)
+        url_safe = ("-" in t) or ("_" in t)
+        raw = t.replace("-", "+").replace("_", "/")
+        try:
+            dec = base64.b64decode(raw + "=" * (-len(raw) % 4)).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            return t
+        new = dec
+        for p in _EPHEMERAL_PORTS:
+            new = new.replace("127.0.0.1:" + p, "127.0.0.1:<PORT>")
+        if new == dec:
+            return t
+        enc = base64.b64encode(new.encode("utf-8")).decode("ascii")
+        if url_safe:
+            enc = enc.replace("+", "-").replace("/", "_")
+        return enc.rstrip("=")
+
+    return _B64_RUN.sub(repl, text)
+
+
+def _redact(text):
+    """把易变值换成占位符，**反复直到不动**。
+
+    一次不够，因为两者会互相嵌套：令牌本身可能整段出现在一个 base64url 载荷里，
+    所以"先脱敏端口再脱敏令牌"的顺序会漏 —— 解出内层明文之后才看得见令牌。
+    迭代到不动点，比猜一个正确顺序可靠（我猜错过一次）。
+    """
+    for p in sorted(_EPHEMERAL_PORTS, key=len, reverse=True):
+        text = text.replace("127.0.0.1:" + p, "127.0.0.1:<PORT>")
+    for _ in range(5):
+        nxt = _redact_token(_redact_b64_runs(text))
+        if nxt == text:
+            break
+        text = nxt
+    return text
+
+
 META = {"io.modelcontextprotocol/protocolVersion": "2026-07-28",
         "io.modelcontextprotocol/clientInfo": {"name": "smoke-client",
                                                "version": "1.0.0"},
@@ -83,18 +167,18 @@ class Transcript:
 
     def req(self, tag, obj):
         self.entries.append(">>> [%s] %s"
-                            % (tag, json.dumps(obj, ensure_ascii=False,
-                                               separators=(",", ":"))))
+                            % (tag, _redact(json.dumps(obj, ensure_ascii=False,
+                                                       separators=(",", ":")))))
         if self.client is not None:
             self.client.send(obj)
 
     def resp(self, obj):
         self.entries.append("<<< %s"
-                            % json.dumps(obj, ensure_ascii=False,
-                                         separators=(",", ":")))
+                            % _redact(json.dumps(obj, ensure_ascii=False,
+                                                 separators=(",", ":"))))
 
     def note(self, text):
-        self.entries.append("--- %s" % text)
+        self.entries.append("--- %s" % _redact(text))
 
     def check(self, name, ok, detail=""):
         if ok:
@@ -110,7 +194,9 @@ class Transcript:
     def write(self):
         with open(SMOKE_PATH, "w", encoding="utf-8") as fh:
             fh.write("phocinae-mcp MCP 客户端模拟（stdio 全流程）\n")
-            fh.write("时间：%s\n" % time.strftime("%Y-%m-%d %H:%M:%S"))
+            # 不写真实时间：这个文件被 git 跟踪，写时间会让每次运行都产生
+            # 27 行假 diff，把真正的断言变化淹掉。记录的是"本次运行生成"。
+            fh.write("生成：每次运行重新生成（时间戳刻意不写入，见 test_mcp.py）\n")
             fh.write("传输：stdio（子进程 -m phocinae_mcp，mock P0 服务）\n")
             fh.write("=" * 72 + "\n\n")
             for e in self.entries:
@@ -627,6 +713,7 @@ def modern_flow(t, c, mock):
 
 def main():
     mock = MockSystemone().start()
+    _note_port(mock.base_url)          # 记下本次的临时端口，transcript 里脱敏
     proc = start_server(mock)
     c = StdioClient(proc)
     t = Transcript(client=c)

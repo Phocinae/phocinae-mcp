@@ -1,8 +1,8 @@
 phocinae-mcp Streamable HTTP 冒烟（MCP 2026-07-28）
-时间：2026-10-12 18:44:05
+生成：每次运行重新生成（时间戳刻意不写入）
 ========================================================================
 
-PASS: H0 HTTP 服务启动 — port=57737
+PASS: H0 HTTP 服务启动 — port=<PORT>（内核分配，不写入真实端口）
 PASS: H1 discover 200 — status=200
 PASS: H2 tools/list 缓存提示
 PASS: H3 gate allow
