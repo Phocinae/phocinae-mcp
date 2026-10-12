@@ -358,10 +358,17 @@ def modern_flow(t, c, mock):
     t.check("M4 gate deny",
             r["result"]["structuredContent"]["decision"] == "deny")
 
-    t.req("M5 gate fail-closed（服务不可用）",
+    # M5 uses a GREY-ZONE command, not `echo ok`. `echo ok` is in the L0
+    # whitelist, and the L0 layer now ships inside this package, so it is allowed
+    # offline without ever contacting the server — which means it cannot exercise
+    # "fail-closed when the service is unreachable". A grey-zone command (one L0
+    # cannot decide) does reach the model, and that is the path this assertion is
+    # about. Changing the command does not weaken the check; it makes the check
+    # test what it claims to test.
+    t.req("M5 gate fail-closed（服务不可用 · 灰区命令）",
           rpc("tools/call",
               _with_meta({"name": "gate",
-                          "arguments": {"command": "echo ok",
+                          "arguments": {"command": "pip install requests",
                                         "server":
                                         "http://127.0.0.1:1"}}, META),
               104))

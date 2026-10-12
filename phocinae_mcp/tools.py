@@ -117,8 +117,32 @@ def _gate_via_guard(ctx, command, cwd, server):
     return result
 
 
+# 明确的逃生舱：用户知道自己在做什么时才允许"只用模型"的 gate。
+ALLOW_MODEL_ONLY_ENV = "PHOCINAE_MCP_ALLOW_MODEL_ONLY_GATE"
+
+
 def _gate_via_http(ctx, command, cwd, server):
     """无 guard 时的等价实现：noul + score 两问（P0 协议），阈值同 guard。"""
+
+    # L0 先定夺。guard.py 在场用 guard 的，不在场用随包发行的 l0.py
+    # （与 guard 逐字同源，tests/test_l0_parity.py 保证不漂移）。
+    # 这一步是 gate 可用的前提：少了它，每条命令都要问 150M 模型，而模型在
+    # 命令审批域没有校准，连 `git status` 都会拿到低于 ask 阈的分数而被拒。
+    l0_verdict = None
+    if hasattr(ctx.bridge, "l0_decide"):
+        l0_verdict = ctx.bridge.l0_decide(command)
+    if l0_verdict:
+        l0_decision, l0_reason, l0_layer = l0_verdict
+        if l0_decision in ("allow", "deny"):
+            return {
+                "command": command, "cwd": cwd,
+                "decision": l0_decision,
+                "layer": l0_layer or "L0",
+                "reason": l0_reason,
+                "noul": None, "score": None,
+                "engine": "bundled-l0" if not getattr(ctx.bridge, "guard", None) else "guard-l0",
+            }
+
     state = json.dumps({
         "command": command, "cwd": cwd,
         "tool": "phocinae-mcp/" + __version__,

@@ -1,0 +1,210 @@
+{
+  "version": 1,
+  "note": "phocinae-guard L0 确定性表：whitelist=精确放行；whitelist_prefix=前缀放行；blacklist=[name, 正则, 说明] 先于白名单判定（deny 优先）。默认**合并**语义：文件各节追加到内置默认对应节（自定义一条规则不会再丢掉内置的 rm -rf / 等拦截）；要旧版整节替换语义时显式写 \"replace\": true（顶层，对三节都生效）或 \"<节名>_replace\": true（如 blacklist_replace）。判定细节：黑名单对原串+归一化串+每个命令段都跑；白名单要求每一段都命中；换行/CRLF/引号外制表符视为命令分隔符。",
+  "whitelist": [
+    "ls",
+    "ls -a",
+    "ls -la",
+    "ls -l",
+    "pwd",
+    "whoami",
+    "date",
+    "uname -a",
+    "env",
+    "hostname",
+    "id",
+    "echo $?",
+    "which python",
+    "which python3",
+    "which node",
+    "which git",
+    "git status",
+    "git status --short",
+    "git diff",
+    "git diff --stat",
+    "git log",
+    "git log --oneline",
+    "git log --oneline -10",
+    "git show",
+    "git branch",
+    "git branch -a",
+    "git remote -v",
+    "git fetch",
+    "git fetch --all",
+    "git stash list",
+    "git tag",
+    "git tag -l",
+    "git --version",
+    "python --version",
+    "python3 --version",
+    "pip --version",
+    "node --version",
+    "npm --version",
+    "gcc --version",
+    "g++ --version"
+  ],
+  "whitelist_prefix": [
+    "ls",
+    "cat",
+    "head",
+    "tail",
+    "grep",
+    "wc",
+    "sort",
+    "uniq",
+    "du",
+    "df",
+    "file",
+    "stat",
+    "echo",
+    "git status",
+    "git diff",
+    "git log",
+    "git show",
+    "git fetch",
+    "git remote",
+    "git stash",
+    "git branch",
+    "git tag",
+    "git shortlog",
+    "git blame",
+    "python3 -m pytest",
+    "pytest",
+    "python -m unittest",
+    "npm test",
+    "npm run lint",
+    "make test"
+  ],
+  "blacklist": [
+    [
+      "rm_system",
+      "(^|[;&|]\\s*)rm[ \\t]+(-\\S+\\s+)*(/(\\s|$|\\*)|\\s*(~|\\$HOME)(/\\*|\\s|$)|/(etc|usr|var|boot|bin|sbin|lib|opt|root)(/|$))",
+      "rm 删除根目录/家目录/系统路径"
+    ],
+    [
+      "rm_dot",
+      "(^|[;&|]\\s*)rm\\s+(-\\S+\\s+)*\\.{1,2}(\\s|$)",
+      "rm -rf . 或 ..（清空当前/上级目录）"
+    ],
+    [
+      "sudo_destructive",
+      "(^|[;&|]\\s*)sudo\\s+(rm|dd|mkfs(\\.[a-z0-9]+)?|fdisk|sfdisk|parted|wipefs|shutdown|reboot|poweroff|halt)\\b",
+      "sudo 破坏性操作"
+    ],
+    [
+      "pipe_to_sh",
+      "[^;&|]\\s*\\|\\s*(sudo\\s+)*(?:\"|\\')?\\\\?(ba|da|k|z|c)?sh\\b",
+      "命令管道喂给 shell（curl|sh 一类）"
+    ],
+    [
+      "curl_pipe_sh",
+      "(^|[;&|]\\s*)(curl|wget|fetch|lynx|w3m)\\b[^;&|]*\\|\\s*(sudo\\s+)*(?:\"|\\')?\\\\?(ba|da|k|z|c)?sh\\b",
+      "curl/wget 下载即执行"
+    ],
+    [
+      "git_force_push",
+      "git\\s+push\\b[^;&|]*(--force(\\s|$)|(\\s|^)-f(\\s|$))",
+      "git push --force / -f（--force-with-lease 走 L1）"
+    ],
+    [
+      "git_push_delete",
+      "git\\s+push\\b[^;&|]*--delete\\b",
+      "git push 删除远程分支"
+    ],
+    [
+      "find_root_delete",
+      "(^|[;&|]\\s*)find\\s+/(\\s|$)[^;&|]*-delete\\b",
+      "find 从根目录 -delete"
+    ],
+    [
+      "find_system_delete",
+      "find\\s+/(etc|usr|var|boot|bin|sbin|lib|opt|root)\\S*[^;&|]*-delete\\b",
+      "find 系统路径 -delete"
+    ],
+    [
+      "find_exec_rm",
+      "find\\b[^;&|]*-exec\\s+(sudo\\s+)?rm\\b",
+      "find -exec rm"
+    ],
+    [
+      "xargs_rm",
+      "xargs\\b[^;&|]*\\brm\\b",
+      "xargs 接 rm"
+    ],
+    [
+      "dd_write_dev",
+      "\\bdd\\b[^;&|]*\\bof=/dev/(sd|hd|vd|nvme|mmcblk|dm-|md|loop|disk)",
+      "dd 写块设备"
+    ],
+    [
+      "mkfs",
+      "(^|[;&|]\\s*)(mkfs(\\.[a-z0-9]+)?|fdisk|sfdisk|parted|wipefs)\\b",
+      "格式化/分区工具"
+    ],
+    [
+      "chmod777",
+      "chmod\\s+(-R\\s+|--recursive\\s+)*77[0-7]\\s",
+      "chmod 777（含 -R）"
+    ],
+    [
+      "chown_system",
+      "chown\\s+(-\\S+\\s+)*\\S+\\s+/(etc|usr|var|boot|bin|sbin|lib|opt|root)\\S*",
+      "chown 系统路径"
+    ],
+    [
+      "fork_bomb",
+      ":\\s*\\(\\s*\\)\\s*\\{",
+      "fork bomb :(){ :|:& };:"
+    ],
+    [
+      "fork_bomb_win",
+      "%0\\s*\\|\\s*%0",
+      "fork bomb %0|%0"
+    ],
+    [
+      "shutdown",
+      "(^|[;&|]\\s*)(shutdown|reboot|poweroff|halt)\\b",
+      "关机/重启"
+    ],
+    [
+      "crontab_r",
+      "crontab\\s+-\\S*r\\b",
+      "crontab -r 清空计划任务"
+    ],
+    [
+      "write_redirect_system",
+      ">>?\\s*/(etc|usr|var|boot|bin|sbin|lib|opt|root)\\S*",
+      "重定向覆写系统文件"
+    ],
+    [
+      "outfile_system",
+      "(^|\\s)(-o|--output)\\s*=?\\s*/(etc|usr|var|boot|bin|sbin|lib|opt|root)(/|\\s|$)",
+      "输出重定向到系统路径（-o/--output）"
+    ],
+    [
+      "exfil_stdin",
+      "(^|[;&|]\\s*)(curl|wget|fetch)\\b[^;&|]*(--data(-binary|-ascii|-raw|-urlencode)?|-d|-T|--upload-file|--post-file)\\s*=?\\s*@?-(?=\\s|$|[;&|])",
+      "curl/wget 把 stdin（管道/私钥）外发"
+    ],
+    [
+      "eval_curl",
+      "eval\\s+[\\\"'\\`]?\\s*\\$?\\s*\\(\\s*(curl|wget)\\b",
+      "eval $(curl ...)"
+    ],
+    [
+      "source_curl",
+      "(source|\\.)\\s+<\\(\\s*(curl|wget)\\b",
+      "source <(curl ...)"
+    ],
+    [
+      "sh_c_curl",
+      "(ba)?sh\\s+-c\\s+[\\\"']\\s*(curl|wget)\\b",
+      "sh -c 'curl ...'"
+    ],
+    [
+      "mv_system",
+      "mv\\s+(-\\S+\\s+)*\\S+\\s+/(etc|usr|var|boot|bin|sbin|lib|opt|root)\\S*",
+      "mv 进系统路径"
+    ]
+  ]
+}

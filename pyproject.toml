@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phocinae-mcp"
-version = "0.2.2"
+version = "0.2.3"
 description = "斑海豹 MCP server（gate/classify/route/score；stdio + Streamable HTTP；MCP 2026-07-28 对齐 + 2024-11-05 兼容）—— 本地增强版，不发布"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "Apache-2.0" }
-authors = [{ name = "phocinae-eco (local enhanced fork)" }]
+authors = [{ name = "Phocinae" }]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
@@ -21,3 +21,10 @@ phocinae-mcp = "phocinae_mcp.server:main"
 
 [tool.setuptools]
 packages = ["phocinae_mcp"]
+
+[tool.setuptools.package-data]
+# l0_table.json is the bundled L0 table. Without this it is NOT included in the
+# wheel, load_bundled_table() returns None on a user's machine, and the gate
+# silently falls back to asking the model about every command — which is exactly
+# the defect 0.2.3 fixes. The build is verified for it after packaging.
+phocinae_mcp = ["l0_table.json"]

@@ -18,7 +18,7 @@
 FROM python:3.12-slim
 
 # Pin the release so a directory check months from now tests the same artifact.
-ARG PHOCINAE_MCP_VERSION=0.2.2
+ARG PHOCINAE_MCP_VERSION=0.2.3
 # Package index. Defaults to PyPI, which is what a directory check wants: it
 # resolves the same artifact every other user gets. Override it when PyPI's file
 # CDN is unreachable from the build host — which is a real situation, not a

@@ -1,8 +1,8 @@
 phocinae-mcp Streamable HTTP 冒烟（MCP 2026-07-28）
-时间：2026-10-12 10:49:27
+时间：2026-10-12 18:35:47
 ========================================================================
 
-PASS: H0 HTTP 服务启动 — port=50466
+PASS: H0 HTTP 服务启动 — port=61543
 PASS: H1 discover 200 — status=200
 PASS: H2 tools/list 缓存提示
 PASS: H3 gate allow

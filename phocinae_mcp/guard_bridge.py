@@ -84,6 +84,63 @@ class GuardBridge:
     def available(self):
         return self.guard is not None
 
+    def l0_decide(self, command):
+        """只用 L0 判一次。返回 (decision, reason, layer) 或 None（L0 说不了）。
+
+        L0 来源优先级：
+          1) guard.py（若在场）—— 与 guard 完全同源；
+          2) 随包发行的 l0.py + l0_table.json —— 内容是从 guard 逐字抽取的，
+             由 tests/test_l0_parity.py 保证不漂移。
+        两者都没有（例如表被删除）才返回 None，交由上层问模型。
+        """
+        table = None
+        if self.guard is not None:
+            try:
+                base = os.path.dirname(os.path.abspath(self.path))
+                table = self.guard.load_l0_table(os.path.join(base, "l0_table.json"))
+            except (OSError, ValueError, AttributeError):
+                table = None
+            if table:
+                try:
+                    return self.guard.l0_judge(command, table)
+                except (Exception, SystemExit):
+                    pass
+        # 退回随包 L0
+        try:
+            from . import l0 as _l0
+        except ImportError:  # pragma: no cover
+            return None
+        table = table or _l0.load_bundled_table()
+        if not table:
+            return None
+        try:
+            return _l0.l0_judge(command, table)
+        except (Exception, SystemExit):
+            return None
+
+    def unavailable_reason(self):
+        """guard.py 缺席时，说明缺的是哪一层以及怎么补。
+
+        L0（离线确定性表）是 gate 的第一层，也是唯一能毫秒级判"明显安全/明显危险"
+        的一层。少了它，每条命令都会去问 150M 模型，而模型在命令审批域没有校准，
+        结果是良性命令也被拒。所以缺席时必须说出来，而不是照常给裁决。
+        """
+        return (
+            "guard.py (the L0 deterministic layer) was not found, so the gate has "
+            "no offline layer to decide with. Falling back to the model alone is "
+            "not a usable gate: the 150M weights are not calibrated for command "
+            "approval and return a harm score below the 'ask' threshold even for "
+            "commands like 'git status', which yields deny for everything.\n"
+            "Fix one of these:\n"
+            "  1. pip install phocinae-guard, then point at its guard.py:\n"
+            "       --guard /path/to/guard.py   (or set PHOCINAE_MCP_GUARD_PATH)\n"
+            "  2. keep using a development checkout where ../phocinae-guard/guard.py "
+            "exists.\n"
+            "To accept model-only adjudication deliberately, set "
+            "PHOCINAE_MCP_ALLOW_MODEL_ONLY_GATE=1.\n"
+            "Underlying error: " + (self.error or "(none)")
+        )
+
     def make_cfg(self, server, timeout, l1_enabled):
         """按 guard.load_config 约定构造配置。
 

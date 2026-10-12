@@ -1,5 +1,31 @@
 # CHANGES
 
+## 0.2.3 — 2026-10-12
+
+- **修复「普通 pip 安装后 gate 不可用」**：实测 PyPI 上的 0.2.2 wheel + 真实 MCP
+  客户端会话，`pip install phocinae-mcp` 之后**每条命令都被拒** ——
+  `git status` 得到 `decision=deny, layer=L1, score=3.0`（ask 阈是 4.0）。
+  根因：L0 确定性层不在包里，`locate_guard()` 只在开发 checkout 里找得到
+  `../phocinae-guard/guard.py`，于是每次 gate 都退化成把命令交给 150M 模型，
+  而模型在命令审批域没有校准（guard 的 README 自己写了这点）。
+  方向是 fail-closed（不是误放行），但工具直接不可用，且用户看不到原因。
+- **L0 现在随包发行**：新增 `phocinae_mcp/l0.py` 与 `phocinae_mcp/l0_table.json`
+  （5.6KB，40 白名单 / 30 前缀 / 26 黑名单规则）。`l0.py` 的函数体是从
+  guard.py **逐字抽取**的，不是重写 —— 重写会产生两份实现，guard 修绕过漏洞时
+  这份会悄悄分叉。`tests/test_l0_parity.py` 用 33 条共享语料（含全部已知绕过样本）
+  逐条比对两边裁决，任何漂移立刻失败；实测 33/33 一致。
+- gate 的判定顺序因此变成：**L0 先定夺（离线、毫秒级、不调模型）→ 只有灰区才问模型**，
+  与 guard 的设计意图一致。修复后 `git status` / `npm test` 由 L0 直接 allow，
+  `rm -rf /` 与绕过样本 `ls\nrm -rf /` 直接 deny，全程不需要服务。
+- `pyproject.toml` 增加 `[tool.setuptools.package-data]`：**不写这一条表就不会进
+  wheel**，随包 L0 会在用户机器上加载失败并静默退回"什么都问模型"，等于把刚修的
+  bug 换个方式复现。构建后开箱验表已纳入流程（从 wheel 解包跑真实 MCP 会话）。
+- 顺带修正 `authors`：原为 `phocinae-eco (local enhanced fork)`，这是会显示在 PyPI
+  页面上的归属字段，改为 `Phocinae`。
+- `tests/test_mcp.py` 的 M5（服务不可用 fail-closed）改用**灰区命令**
+  `pip install requests`，原来用的 `echo ok` 在 L0 白名单里、现在离线就 allow，
+  压根不碰 server，测不到它声称要测的路径。
+
 ## 0.2.2 — 2026-10-12
 
 - **修复测试套件在非 UTF-8 控制台上自杀**：`tests/test_mcp.py` 通过全部 42 项检查后，
