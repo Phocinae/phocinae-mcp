@@ -11,6 +11,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import sys
 import threading
 import time
@@ -152,6 +153,15 @@ def main():
     mock = MockSystemone().start()
     env = dict(os.environ)
     env["PYTHONPATH"] = PKG_ROOT + os.pathsep + env.get("PYTHONPATH", "")
+    # Pin guard discovery to "not found" so the gate deterministically takes the
+    # pure-HTTP fallback. Otherwise the suite's result depends on whether a
+    # sibling phocinae-guard checkout happens to exist: with one present, L1 is
+    # off by default and a grey-zone command becomes fail-closed deny instead of
+    # the ask -> MRTR path H4/H5 exercise. locate_guard() treats a non-existent
+    # path as "no guard".
+    env["PHOCINAE_MCP_GUARD_PATH"] = os.path.join(
+        tempfile.gettempdir(), "phocinae-mcp-test-no-such-guard.py")
+    env.pop("PHOCINAE_GUARD_PATH", None)
     proc = subprocess.Popen(
         [sys.executable, "-m", "phocinae_mcp", "--transport", "http",
          "--port", "0", "--server", mock.base_url, "--timeout", "2"],

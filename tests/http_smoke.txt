@@ -1,0 +1,25 @@
+phocinae-mcp Streamable HTTP 冒烟（MCP 2026-07-28）
+时间：2026-10-12 10:02:14
+========================================================================
+
+PASS: H0 HTTP 服务启动 — port=57733
+PASS: H1 discover 200 — status=200
+PASS: H2 tools/list 缓存提示
+PASS: H3 gate allow
+PASS: H4 ask → input_required
+PASS: H5 accept → allow
+PASS: H6 缺版本头 → 400 -32020
+PASS: H7 版本不支持 → 400 -32022
+PASS: H8 Mcp-Method 不一致 → 400 -32020
+PASS: H9 缺 Mcp-Name → 400 -32020
+PASS: H10 Mcp-Name 不一致 → 400 -32020
+PASS: H11 Accept 不含 JSON/SSE → 406
+PASS: H12 头版本与 body _meta 不一致 → 400 -32020
+PASS: H13 通知 → 202 空 body
+PASS: H14 未知方法 → 404 -32601
+PASS: H15 坏 JSON → 400 -32700
+PASS: H16 resources/read（Mcp-Name=uri）
+PASS: H17 GET → 405 — status=405
+
+========================================================================
+汇总：PASS=18 FAIL=0

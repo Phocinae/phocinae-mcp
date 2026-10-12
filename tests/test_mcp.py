@@ -19,6 +19,7 @@ import json
 import os
 import queue
 import subprocess
+import tempfile
 import sys
 import threading
 import time
@@ -155,8 +156,24 @@ class StdioClient:
 
 
 def start_server(mock):
+    """启动被测 server。
+
+    关键：把 guard 发现**固定为「找不到」**，让 gate 稳定走纯 HTTP 回退路径。
+
+    否则本套件的结果取决于仓库旁边是否存在 phocinae-guard：
+      · 没有 → 走 HTTP 回退，题面文本作为 state 送进 mock 模型，
+        "ask human first" 命中 mock 的 ask 分支 → 灰区 → MRTR（M6 要考的路径）；
+      · 有   → 走 guard 的 L0/编排，L1 默认关闭 → 灰区 fail-closed deny，
+        没有 MRTR，M6 直接 KeyError。
+    指向一个必然不存在的路径即可让 `locate_guard()` 返回空串（它用
+    `os.path.isfile` 判定），从而与「干净检出/独立安装」的行为一致。
+    真实 guard 的编排由 phocinae-guard 仓自己的回归套件覆盖。
+    """
     env = dict(os.environ)
     env["PYTHONPATH"] = PKG_ROOT + os.pathsep + env.get("PYTHONPATH", "")
+    env["PHOCINAE_MCP_GUARD_PATH"] = os.path.join(
+        tempfile.gettempdir(), "phocinae-mcp-test-no-such-guard.py")
+    env.pop("PHOCINAE_GUARD_PATH", None)  # 兼容别名不得覆盖上面的值
     proc = subprocess.Popen(
         [sys.executable, "-m", "phocinae_mcp",
          "--server", mock.base_url, "--timeout", "2"],

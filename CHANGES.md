@@ -1,3 +1,11 @@
+# CHANGES
+
+## 0.2.1 — 2026-10-11
+
+- README 顶部加入 MCP Registry 的归属令牌 `mcp-name: io.github.Phocinae/phocinae-mcp`。
+  官方 Registry 在发布时要求 PyPI 包的 README 里出现该令牌；0.2.0 的 metadata 已不可变，
+  故以 0.2.1 补上（代码与 0.2.0 完全一致，仅 README 与版本号变化）。
+
 # CHANGES —— 相对 PyPI phocinae-mcp 0.1.1 的增强清单
 
 基线：`_orig/`（phocinae_mcp-0.1.1-py3-none-any.whl 解包，纯标准库 stdio

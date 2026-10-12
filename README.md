@@ -1,3 +1,5 @@
+<!-- mcp-name: io.github.Phocinae/phocinae-mcp -->
+
 <img src="docs/assets/logo_phocinae.png" width="150" alt="斑海豹 Phocinae logo">
 
 # phocinae-mcp
