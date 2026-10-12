@@ -18,6 +18,7 @@
 
 import json
 import signal
+import socket
 import sys
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,6 +31,31 @@ from .protocol import (SUPPORTED_VERSIONS, META_VERSION,
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 ENDPOINT_PATHS = ("", "/", "/mcp")
+
+# ThreadingHTTPServer 继承的 address_family 默认是 AF_INET（IPv4）。把 `::1` 交给它，
+# socket 会拿 IPv6 字面量去做 IPv4 解析，直接 `socket.gaierror: getaddrinfo failed`。
+# 文档从 0.2.0 起就把 `::1` 列为允许的回环地址，但**从来没有测试验过这条**，
+# 所以这个不一致一直没人发现（实测发布到 PyPI 的 0.2.4：`--host ::1` 以 exit 1 崩溃，
+# 而不是开始服务）。这里按主机字面量选地址族，把文档兑现。
+def _address_family_for(host):
+    """按 host 字面量选 socket 地址族；只有显式 IPv6 才用 AF_INET6。
+
+    刻意**不**用 getaddrinfo 的结果来猜：`localhost` 同时解析出 v4/v6，用 v6 绑定会
+    改变 `http://localhost:port` 的可达性。只把字面量 `::1` 当作 v6，其它保持 v4 ——
+    改动面最小，且不影响已经工作的两个地址。
+    """
+    return socket.AF_INET6 if ":" in host else socket.AF_INET
+
+
+class _IPv6ThreadingHTTPServer(ThreadingHTTPServer):
+    """地址族为 IPv6 的 ThreadingHTTPServer。
+
+    `server_bind` 会调 `socket.getfqdn(host)`，对 IPv6 字面量可能很慢；这里保持
+    默认实现即可（实测 `::1` 绑定在 12 秒内完成）。存在的唯一理由是换掉
+    `address_family` —— 它必须在**实例化时**就正确。
+    """
+    address_family = socket.AF_INET6
+
 
 _METHOD_HEADER = "Mcp-Method"
 _NAME_HEADER = "Mcp-Name"
@@ -231,7 +257,13 @@ def serve_http(mcp_server, host="127.0.0.1", port=8255):
     if host not in LOOPBACK_HOSTS:
         log("error", "拒绝绑定非回环地址 %r（本服务仅允许本机访问）" % host)
         raise SystemExit(2)
-    httpd = ThreadingHTTPServer((host, port), make_handler(mcp_server))
+    # 按 host 选地址族。ThreadingHTTPServer 的 address_family 是 AF_INET，把 `::1`
+    # 交给它会拿 IPv6 字面量做 IPv4 解析 -> `socket.gaierror: getaddrinfo failed`。
+    # 地址族由**类属性**决定，所以必须在实例化时就用对的类，事后覆盖 socket 没用。
+    factory = (_IPv6ThreadingHTTPServer
+               if _address_family_for(host) == socket.AF_INET6
+               else ThreadingHTTPServer)
+    httpd = factory((host, port), make_handler(mcp_server))
     httpd.daemon_threads = True
     actual_host, actual_port = httpd.server_address[:2]
 

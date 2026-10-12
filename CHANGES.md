@@ -1,5 +1,26 @@
 # CHANGES
 
+## 0.2.5 — 2026-10-12
+
+- **`--host ::1` 现在真的能用**（此前一直崩溃）。README 从 0.2.0 起就写着
+  `--host` 只允许 `127.0.0.1` / `localhost` / `::1`，其他地址直接拒绝启动（exit 2），
+  但**没有任何测试验过这条**。实测发布到 PyPI 的 0.2.4：
+
+      --host ::1   ->  socket.gaierror: getaddrinfo failed  （exit 1，不是开始服务）
+      --host 0.0.0.0      ->  exit 2  （正确）
+      --host 192.168.1.5  ->  exit 2  （正确）
+
+  原因是 `http.server.ThreadingHTTPServer` 的 `address_family` 是 `AF_INET`，
+  而 `::1` 解析出 `AF_INET6`，于是 socket 拿 IPv6 字面量去做 IPv4 解析。
+  现在按 host 字面量选地址族（只有显式 IPv6 才用 `AF_INET6`，`localhost` 保持 IPv4，
+  以免改变 `http://localhost:port` 的可达性）。
+
+- **补上 `--host` 契约测试**（`tests/test_http.py`，HTTP 套件 18 → 23 项）。
+  这是"文档承诺没有测试"的典型：一个**安全属性**（不把本地决策服务绑到公网）
+  加一个从没跑过的地址，两者叠加就让缺陷活了两个版本。回环地址断言"必须开始监听"，
+  非回环断言"必须 exit 2"。
+
+
 ## 0.2.4 — 2026-10-12
 
 - **L0 白名单补上 Windows 上真正存在的 Python 形态**：`whitelist_prefix` 里原来只有

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phocinae-mcp"
-version = "0.2.4"
+version = "0.2.5"
 description = "斑海豹 MCP server（gate/classify/route/score；stdio + Streamable HTTP；MCP 2026-07-28 对齐 + 2024-11-05 兼容）—— 本地增强版，不发布"
 readme = "README.md"
 requires-python = ">=3.8"

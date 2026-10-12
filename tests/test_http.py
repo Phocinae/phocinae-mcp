@@ -193,6 +193,38 @@ def main():
         hc = HttpClient("http://127.0.0.1:%d" % port)
         ck.check("H0 HTTP 服务启动", True, "port=<PORT>（内核分配，不写入真实端口）")
 
+        # ---- `--host` 契约（README 承诺：只允许回环；其他地址拒绝启动 exit 2）
+        #
+        # 这一组是补上的：README 从 0.2.0 起就写了"只允许 127.0.0.1 / localhost / ::1，
+        # 其他地址直接拒绝启动（exit 2）"，但**测试从来没有验过任何一个地址**。
+        # 后果实测到了：`--host ::1` 一直是以 `socket.gaierror: getaddrinfo failed`
+        # 崩溃（exit 1）—— 因为 ThreadingHTTPServer 的 address_family 是 AF_INET，
+        # 拿到 IPv6 字面量去做 IPv4 解析。文档承诺的功能从未可用，而没有任何信号。
+        #
+        # 判据：回环地址必须**开始监听**（用超时杀掉即为启动成功），
+        #       非回环地址必须**立即 exit 2**。
+        def _run_host(host, timeout=12):
+            """返回 ("serving", "") 或 ("exit N", output)。"""
+            try:
+                p = subprocess.run(
+                    [sys.executable, "-m", "phocinae_mcp", "--transport", "http",
+                     "--host", host, "--port", "0", "--server", mock.base_url],
+                    cwd=PKG_ROOT, env=env, stdin=subprocess.DEVNULL,
+                    capture_output=True, timeout=timeout)
+                return "exit %d" % p.returncode, \
+                    (p.stdout + p.stderr).decode("utf-8", "replace").strip()[-120:]
+            except subprocess.TimeoutExpired:
+                return "serving", "still listening (expected)"
+
+        for host in ("127.0.0.1", "localhost", "::1"):
+            got, detail = _run_host(host)
+            ck.check("H-host loopback %s 开始监听" % host, got == "serving", detail)
+
+        for host in ("0.0.0.0", "192.168.1.5"):
+            got, detail = _run_host(host)
+            ck.check("H-host 非回环 %s 拒绝启动（exit 2）" % host,
+                     got == "exit 2", "got %s  %s" % (got, detail))
+
         # ---- 正常路径
         st, obj, _ = hc.post("server/discover", _with_meta({}), rid=1)
         ck.check("H1 discover 200", st == 200 and obj["result"]["resultType"]

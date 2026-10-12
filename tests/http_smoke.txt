@@ -3,6 +3,11 @@ phocinae-mcp Streamable HTTP 冒烟（MCP 2026-07-28）
 ========================================================================
 
 PASS: H0 HTTP 服务启动 — port=<PORT>（内核分配，不写入真实端口）
+PASS: H-host loopback 127.0.0.1 开始监听 — still listening (expected)
+PASS: H-host loopback localhost 开始监听 — still listening (expected)
+PASS: H-host loopback ::1 开始监听 — still listening (expected)
+PASS: H-host 非回环 0.0.0.0 拒绝启动（exit 2） — got exit 2  phocinae-mcp[error]: 拒绝绑定非回环地址 '0.0.0.0'（本服务仅允许本机访问）
+PASS: H-host 非回环 192.168.1.5 拒绝启动（exit 2） — got exit 2  phocinae-mcp[error]: 拒绝绑定非回环地址 '192.168.1.5'（本服务仅允许本机访问）
 PASS: H1 discover 200 — status=200
 PASS: H2 tools/list 缓存提示
 PASS: H3 gate allow
@@ -22,4 +27,4 @@ PASS: H16 resources/read（Mcp-Name=uri）
 PASS: H17 GET → 405 — status=405
 
 ========================================================================
-汇总：PASS=18 FAIL=0
+汇总：PASS=23 FAIL=0
