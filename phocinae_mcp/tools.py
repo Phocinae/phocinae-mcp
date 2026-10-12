@@ -5,6 +5,13 @@
 fail-closed 语义：
     gate      → 服务不可用 / 判定异常时仍返回成功结果，decision=deny + 原因说明；
     classify / route / score → 服务不可用时返回明确错误（MCP isError:true）。
+
+协议对齐（2026-07-28）：
+- 参数 schema 收紧：长度上限（command/state 20000、单项 2000、数组 100、
+  cwd 4096、server 2048）与运行时校验同口径；
+- description 按「何时使用 / 何时不使用」重写；
+- outputSchema 声明返回结构（gate.decision 等 enum 约束）；
+- gate 的 ask 结果由 server.py 升级为 MRTR 交互（elicitation/create）。
 """
 
 import json
@@ -16,6 +23,14 @@ from .backend import (SystemoneClient, SystemoneError, map_gate,
                       unwrap_score, NOUL_THRESHOLD, DENY_AT, ASK_AT)
 
 SCORE_RANGE = (2, 10)
+
+# 参数长度上限（与 inputSchema 声明一致；运行时同样执行）
+MAX_COMMAND = 20000
+MAX_STATE = 20000
+MAX_CWD = 4096
+MAX_SERVER = 2048
+MAX_ITEM = 2000
+MAX_ITEMS = 100
 
 
 class McpError(Exception):
@@ -41,27 +56,45 @@ class ToolContext:
 
 
 # ------------------------------------------------------------------ 参数校验
-def _require_str(args, key):
+def _require_str(args, key, max_len=MAX_STATE):
     value = args.get(key)
     if not isinstance(value, str) or not value.strip():
         raise McpError(-32602, "工具参数 %r 必须是非空字符串" % key)
-    return value.strip()
+    value = value.strip()
+    if len(value) > max_len:
+        raise McpError(-32602, "工具参数 %r 超出长度上限 %d（实为 %d）"
+                               % (key, max_len, len(value)))
+    return value
 
 
-def _require_str_list(args, key, min_len=1):
+def _require_str_list(args, key, min_len=1, max_items=MAX_ITEMS,
+                      max_item=MAX_ITEM):
     value = args.get(key)
     if (not isinstance(value, list) or len(value) < min_len
             or any(not isinstance(x, str) or not x.strip() for x in value)):
         raise McpError(-32602,
-                       "工具参数 %r 必须是长度 >= %d 的非空字符串数组" % (key, min_len))
-    return [x.strip() for x in value]
+                       "工具参数 %r 必须是长度 >= %d 的非空字符串数组"
+                       % (key, min_len))
+    if len(value) > max_items:
+        raise McpError(-32602, "工具参数 %r 超出条目上限 %d（实为 %d）"
+                               % (key, max_items, len(value)))
+    value = [x.strip() for x in value]
+    for i, item in enumerate(value):
+        if len(item) > max_item:
+            raise McpError(-32602, "工具参数 %r[%d] 超出长度上限 %d"
+                                   % (key, i, max_item))
+    return value
 
 
 def _opt_server(args, ctx):
     """工具级 --server 覆盖（arg 优先，其次进程级 env/CLI 配置）。"""
     server = args.get("server")
     if isinstance(server, str) and server.strip():
-        return server.strip()
+        server = server.strip()
+        if len(server) > MAX_SERVER:
+            raise McpError(-32602, "工具参数 'server' 超出长度上限 %d"
+                                   % MAX_SERVER)
+        return server
     return ctx.server
 
 
@@ -144,8 +177,13 @@ def _gate_via_http(ctx, command, cwd, server):
 
 def gate(ctx, args):
     """gate(command, cwd?, server?) → {decision: allow|deny|ask, layer, reason, ...}"""
-    command = _require_str(args, "command")
-    cwd = args.get("cwd") if isinstance(args.get("cwd"), str) else ""
+    command = _require_str(args, "command", max_len=MAX_COMMAND)
+    cwd = args.get("cwd")
+    if not isinstance(cwd, str):
+        cwd = ""
+    cwd = cwd.strip()
+    if len(cwd) > MAX_CWD:
+        raise McpError(-32602, "工具参数 'cwd' 超出长度上限 %d" % MAX_CWD)
     cwd = cwd or os.getcwd()
     server = _opt_server(args, ctx)
     if ctx.bridge is not None and ctx.bridge.available:
@@ -184,7 +222,7 @@ def _ask_single_choice(ctx, state, options, question_id, instructions, server):
 
 def classify(ctx, args):
     """classify(state, labels, server?) → {choice: 下标, label, confidence, ...}"""
-    state = _require_str(args, "state")
+    state = _require_str(args, "state", max_len=MAX_STATE)
     labels = _require_str_list(args, "labels")
     server = _opt_server(args, ctx)
     index, data = _ask_single_choice(
@@ -201,7 +239,7 @@ def classify(ctx, args):
 
 def route(ctx, args):
     """route(state, tools, server?) → {choice: 下标, tool, ...}（工具路由 choice 题）"""
-    state = _require_str(args, "state")
+    state = _require_str(args, "state", max_len=MAX_STATE)
     tools = _require_str_list(args, "tools")
     server = _opt_server(args, ctx)
     index, data = _ask_single_choice(
@@ -219,7 +257,7 @@ def route(ctx, args):
 
 def score(ctx, args):
     """score(state, criteria, server?) → {score: 2–10, ...}"""
-    state = _require_str(args, "state")
+    state = _require_str(args, "state", max_len=MAX_STATE)
     criteria = _require_str_list(args, "criteria")
     server = _opt_server(args, ctx)
     question = {
@@ -250,78 +288,195 @@ def score(ctx, args):
 
 
 # ------------------------------------------------------------------ MCP tools/list 定义
+_SERVER_PROP = {
+    "type": "string", "maxLength": MAX_SERVER,
+    "description": ("可选：覆盖服务地址（http://host:port，等价于 --server；"
+                    "上限 %d 字符）" % MAX_SERVER),
+}
+_ITEM_PROP = {"type": "string", "minLength": 1, "maxLength": MAX_ITEM}
+
+
+def _array_prop(label):
+    return {
+        "type": "array", "minItems": 1, "maxItems": MAX_ITEMS,
+        "items": _ITEM_PROP,
+        "description": ("%s（必填；1–%d 个非空字符串，单项上限 %d 字符）"
+                        % (label, MAX_ITEMS, MAX_ITEM)),
+    }
+
+
+GATE_OUTPUT_SCHEMA = {
+    "type": "object",
+    "required": ["command", "decision", "layer", "reason"],
+    "properties": {
+        "command": {"type": "string"},
+        "cwd": {"type": "string"},
+        "decision": {"type": "string",
+                     "enum": ["allow", "deny", "ask"]},
+        "layer": {"type": "string",
+                  "enum": ["L0", "L1", "fail_closed", "human_approval"]},
+        "reason": {"type": "string"},
+        "noul": {"type": ["number", "null"]},
+        "score": {"type": ["number", "null"]},
+        "noul_state": {"type": "string"},
+        "engine": {"type": "string"},
+        "server": {"type": "string"},
+        "fail_closed": {"type": "string", "const": "deny"},
+        "tool": {"type": "string"},
+        "model": {"type": ["string", "null"]},
+        "confidence": {"type": ["number", "null"]},
+        "error": {"type": "string"},
+        "human_action": {"type": "string",
+                         "enum": ["approve", "reject", "cancel"]},
+        "status": {"type": "string"},
+    },
+    # guard 分支透传其自有结果字段，故不设 additionalProperties:false
+}
+
 TOOL_DEFS = [
     {
         "name": "gate",
-        "description": ("斑海豹命令审批门：判定一条 shell 命令是否放行。"
-                        "L0 确定性表直接判 allow/deny；灰区可交斑海豹模型裁决（L1）。"
-                        "服务不可用时 fail-closed：返回 deny 并附原因说明。"
-                        "返回 decision ∈ allow|deny|ask 与 layer/reason。"),
+        "title": "命令审批门",
+        "description": (
+            "何时使用：需要判定一条 shell 命令能否执行时——代码代理要跑命令、"
+            "批处理要校验、人工要复核灰区命令，都用 gate 逐条判定。"
+            "何时不使用：不要用它判定非 shell 操作（文件读写、HTTP 调用）；"
+            "不要把多条命令拼成一条字符串绕过判定；宿主已有内置审批机制时"
+            "不要重复叠加。返回 decision ∈ allow|deny|ask 与 layer/reason；"
+            "ask 时结果携带人工确认交互（MCP 2026-07-28 elicitation）"
+            "或明示需人工复核；服务不可用 fail-closed 返回 deny。"),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "command": {"type": "string",
-                            "description": "待判定的 shell 命令（必填）"},
-                "cwd": {"type": "string",
-                        "description": "命令执行工作目录（默认服务器进程当前目录）"},
-                "server": {"type": "string",
-                           "description": "可选：覆盖服务地址（http://host:port，"
-                                          "等价于 --server 参数）"},
+                "command": {"type": "string", "minLength": 1,
+                            "maxLength": MAX_COMMAND,
+                            "description": "待判定的 shell 命令（必填；上限 %d 字符）"
+                                           % MAX_COMMAND},
+                "cwd": {"type": "string", "maxLength": MAX_CWD,
+                        "description": ("命令执行工作目录（可选；默认服务器进程"
+                                        "当前目录）")},
+                "server": _SERVER_PROP,
             },
             "required": ["command"],
+            "additionalProperties": False,
         },
+        "outputSchema": GATE_OUTPUT_SCHEMA,
     },
     {
         "name": "classify",
-        "description": ("分类：把 state 描述归入 labels 之一（choice 题）。"
-                        "返回 choice=选项下标（0 起）、label、置信度。"
-                        "服务不可用时返回明确错误。"),
+        "title": "分类",
+        "description": (
+            "何时使用：需要把一段状态/上下文归入若干已知标签之一"
+            "（意图分类、类型识别）时。"
+            "何时不使用：标签未知或不固定时（改走 route 或让模型自由作答）；"
+            "需要对同一对象打多重分数时（用 score）。"
+            "返回 choice=选项下标（0 起）、label、置信度；服务不可用返回明确错误。"),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "state": {"type": "string",
-                          "description": "待分类的上下文/状态描述（必填）"},
-                "labels": {"type": "array", "items": {"type": "string"},
-                           "description": "候选标签列表（必填，>=1 个非空字符串）"},
-                "server": {"type": "string",
-                           "description": "可选：覆盖服务地址（等价于 --server 参数）"},
+                "state": {"type": "string", "minLength": 1,
+                          "maxLength": MAX_STATE,
+                          "description": "待分类的上下文/状态描述（必填；上限 %d 字符）"
+                                         % MAX_STATE},
+                "labels": _array_prop("候选标签列表"),
+                "server": _SERVER_PROP,
             },
             "required": ["state", "labels"],
+            "additionalProperties": False,
+        },
+        "outputSchema": {
+            "type": "object",
+            "required": ["question", "state", "labels", "choice", "label"],
+            "properties": {
+                "question": {"type": "string", "const": "classify_choice"},
+                "state": {"type": "string"},
+                "labels": {"type": "array", "items": {"type": "string"}},
+                "choice": {"type": "integer", "minimum": 0},
+                "label": {"type": "string"},
+                "confidence": {"type": ["number", "null"]},
+                "model": {"type": ["string", "null"]},
+                "usage": {"type": ["object", "null"]},
+                "server": {"type": "string"},
+            },
+            "additionalProperties": False,
         },
     },
     {
         "name": "route",
-        "description": ("工具路由：从 tools 列表里挑出最合适的一个（choice 题）。"
-                        "返回 choice=下标、tool=选中的工具名。"
-                        "服务不可用时返回明确错误。"),
+        "title": "工具路由",
+        "description": (
+            "何时使用：有确定的候选工具/处理器清单、需要从中挑出最合适的一个"
+            "来服务请求时。"
+            "何时不使用：候选清单不固定或用户已直接指定工具时（尊重用户指定，"
+            "不重复路由）；要评估每个候选的质量而非挑选时（用 score 逐个打分）。"
+            "返回 choice=下标、tool=选中的工具名；服务不可用返回明确错误。"),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "state": {"type": "string",
-                          "description": "请求/上下文描述（必填）"},
-                "tools": {"type": "array", "items": {"type": "string"},
-                          "description": "候选工具名列表（必填，>=1 个非空字符串）"},
-                "server": {"type": "string",
-                           "description": "可选：覆盖服务地址（等价于 --server 参数）"},
+                "state": {"type": "string", "minLength": 1,
+                          "maxLength": MAX_STATE,
+                          "description": "请求/上下文描述（必填；上限 %d 字符）"
+                                         % MAX_STATE},
+                "tools": _array_prop("候选工具名列表"),
+                "server": _SERVER_PROP,
             },
             "required": ["state", "tools"],
+            "additionalProperties": False,
+        },
+        "outputSchema": {
+            "type": "object",
+            "required": ["question", "state", "tools", "choice", "tool"],
+            "properties": {
+                "question": {"type": "string", "const": "route_choice"},
+                "state": {"type": "string"},
+                "tools": {"type": "array", "items": {"type": "string"}},
+                "choice": {"type": "integer", "minimum": 0},
+                "tool": {"type": "string"},
+                "confidence": {"type": ["number", "null"]},
+                "model": {"type": ["string", "null"]},
+                "usage": {"type": ["object", "null"]},
+                "server": {"type": "string"},
+            },
+            "additionalProperties": False,
         },
     },
     {
         "name": "score",
-        "description": ("打分：按 criteria 对 state 打分，返回 score ∈ [2, 10]。"
-                        "服务不可用或应答越界时返回明确错误。"),
+        "title": "打分",
+        "description": (
+            "何时使用：需要按 criteria 给 state 打 2–10 分（风险、质量、适配度等）时。"
+            "何时不使用：需要分类（用 classify）、多选一（用 route 或 gate）、"
+            "或分数语义与 2–10 量纲不符时。"
+            "返回 score ∈ [2, 10] 与 range；服务不可用或应答越界返回明确错误。"),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "state": {"type": "string",
-                          "description": "待打分对象的状态描述（必填）"},
-                "criteria": {"type": "array", "items": {"type": "string"},
-                             "description": "打分标准列表（必填，>=1 个非空字符串）"},
-                "server": {"type": "string",
-                           "description": "可选：覆盖服务地址（等价于 --server 参数）"},
+                "state": {"type": "string", "minLength": 1,
+                          "maxLength": MAX_STATE,
+                          "description": "待打分对象的状态描述（必填；上限 %d 字符）"
+                                         % MAX_STATE},
+                "criteria": _array_prop("打分标准列表"),
+                "server": _SERVER_PROP,
             },
             "required": ["state", "criteria"],
+            "additionalProperties": False,
+        },
+        "outputSchema": {
+            "type": "object",
+            "required": ["question", "state", "criteria", "score", "range"],
+            "properties": {
+                "question": {"type": "string", "const": "score_q"},
+                "state": {"type": "string"},
+                "criteria": {"type": "array", "items": {"type": "string"}},
+                "score": {"type": "number",
+                          "minimum": SCORE_RANGE[0], "maximum": SCORE_RANGE[1]},
+                "range": {"type": "array", "const": list(SCORE_RANGE)},
+                "confidence": {"type": ["number", "null"]},
+                "model": {"type": ["string", "null"]},
+                "usage": {"type": ["object", "null"]},
+                "server": {"type": "string"},
+            },
+            "additionalProperties": False,
         },
     },
 ]
@@ -332,3 +487,5 @@ TOOL_MAP = {
     "route": route,
     "score": score,
 }
+
+

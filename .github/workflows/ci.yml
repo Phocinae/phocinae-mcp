@@ -1,0 +1,67 @@
+# CI for phocinae-mcp.
+#
+# Zero third-party dependencies: `tests/test_mcp.py` is a pure-stdlib unittest
+# suite (no pytest, nothing to pip install, nothing to build).
+#
+# Do NOT set PYTHONUTF8 and do NOT set PYTHONIOENCODING anywhere in this file.
+# That is the entire point of this workflow: the suite drives the server over a
+# real subprocess stdin/stdout pair and asserts on the exact UTF-8 bytes of the
+# frames, which makes it the regression guard for the UTF-8 frame fix. Forcing
+# UTF-8 mode on from the outside would let the server regress to decoding/
+# encoding stdin/stdout with the locale code page and still pass here — i.e. it
+# would silently disarm the very guard this job exists to provide. The assertion
+# step below fails the job if anyone ever adds such a variable.
+#
+# (tests/test_mcp.py itself already sets PYTHONDONTWRITEBYTECODE=1 and a cleaned
+# PYTHONPATH for the child, so the only encoding input is the platform default.)
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: MCP lifecycle (py${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.8', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Cheap tripwire: if a later edit sets PYTHONUTF8 at workflow/job/step
+      # level, this fails instead of quietly weakening the suite. Only the
+      # environment variable is asserted on — sys.flags.utf8_mode is reported for
+      # the log, because on POSIX a C/POSIX locale can legitimately imply it.
+      - name: Assert the UTF-8 regression guard is still armed
+        run: |
+          python -c "import os,sys; assert not os.environ.get('PYTHONUTF8'), 'PYTHONUTF8 must stay unset for this suite'; print('PYTHONUTF8 unset; sys.flags.utf8_mode=%d' % sys.flags.utf8_mode)"
+
+      # Must print the unittest PASS summary ("Ran 22 tests" + "OK") and exit 0.
+      - name: MCP stdio lifecycle suite
+        run: python tests/test_mcp.py
+
+  build:
+    name: build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Proves the package builds from a clean checkout; publishes nothing.
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build

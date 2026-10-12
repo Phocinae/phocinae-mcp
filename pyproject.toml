@@ -4,28 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phocinae-mcp"
-version = "0.1.4"
-description = "斑海豹 Phocinae MCP stdio server：命令审批 gate + classify/route/score 推理工具（纯标准库）"
+version = "0.2.0"
+description = "斑海豹 MCP server（gate/classify/route/score；stdio + Streamable HTTP；MCP 2026-07-28 对齐 + 2024-11-05 兼容）—— 本地增强版，不发布"
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "Apache-2.0"}
-authors = [{name = "phocinae project"}]
-keywords = ["mcp", "model-context-protocol", "command-guard", "claude-code", "cline", "zed"]
-dependencies = []
+license = { text = "Apache-2.0" }
+authors = [{ name = "phocinae-eco (local enhanced fork)" }]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
-    "Operating System :: OS Independent",
     "Topic :: Software Development :: Libraries",
 ]
-
-[project.urls]
-Homepage = "https://github.com/Phocinae/phocinae-mcp"
-Repository = "https://github.com/Phocinae/phocinae-mcp"
-"Bug Tracker" = "https://github.com/Phocinae/phocinae-mcp/issues"
 
 [project.scripts]
 phocinae-mcp = "phocinae_mcp.server:main"
 
-[tool.setuptools.packages.find]
-include = ["phocinae_mcp*"]
+[tool.setuptools]
+packages = ["phocinae_mcp"]

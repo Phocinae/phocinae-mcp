@@ -8,9 +8,15 @@
     3. 找不到 → 降级为纯 HTTP gate（tools.gate 的 noul+score 两问实现）。
 
 导入时禁止写字节码缓存（只读复用 guard 目录，不落任何文件）。
+
+stdout 纯净性（MCP stdio 硬约束：stdout 只允许 JSON-RPC 帧）：
+guard.py 是外部文件，导入期可能向 stdout 打印——导入全程把 stdout
+重定向到 stderr，杜绝任何杂质混入协议通道。
 """
 
+import contextlib
 import importlib.util
+import io
 import os
 import sys
 
@@ -34,6 +40,17 @@ def locate_guard():
     return ""
 
 
+@contextlib.contextmanager
+def _stdout_to_stderr():
+    """临时把 sys.stdout 重定向到 stderr（捕获 guard 导入期的任何打印）。"""
+    real_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        yield
+    finally:
+        sys.stdout = real_stdout
+
+
 class GuardBridge:
     """guard.py 的动态 import 封装；加载失败自动降级（available=False）。"""
 
@@ -53,7 +70,8 @@ class GuardBridge:
             old_flag = sys.dont_write_bytecode
             sys.dont_write_bytecode = True  # 复用 guard 目录时不写 __pycache__
             try:
-                spec.loader.exec_module(module)
+                with _stdout_to_stderr():   # stdout 纯净性：guard 打印进 stderr
+                    spec.loader.exec_module(module)
             finally:
                 sys.dont_write_bytecode = old_flag
             self.guard = module
