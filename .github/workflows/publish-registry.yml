@@ -1,0 +1,75 @@
+name: Publish to MCP Registry
+
+# Publishes server.json to the official MCP Registry
+# (https://registry.modelcontextprotocol.io) using GitHub Actions OIDC, so no
+# long-lived registry credential is stored anywhere.
+#
+# Why OIDC: the registry verifies that the publisher really controls the
+# GitHub namespace the server name claims (`io.github.Phocinae/<server>`).
+# `mcp-publisher login github-oidc` exchanges this job's OIDC token for a
+# short-lived registry token, and `id-token: write` below is what makes that
+# exchange possible.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for the OIDC token exchange
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install phocinae-mcp and run its suites
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python tests/test_mcp.py
+          python tests/test_http.py
+
+      # The registry entry must point at a version that is actually on PyPI,
+      # otherwise clients install nothing. Fail loudly instead of publishing a
+      # dangling reference.
+      - name: Check that the declared version exists on PyPI
+        run: |
+          version="$(python -c "import json;print(json.load(open('server.json'))['version'])")"
+          echo "server.json declares version ${version}"
+          for i in $(seq 1 20); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/phocinae-mcp/${version}/json")"
+            if [ "$code" = "200" ]; then echo "PyPI has ${version}"; exit 0; fi
+            echo "PyPI does not have ${version} yet (HTTP ${code}); retry ${i}/20"
+            sleep 15
+          done
+          echo "::error::phocinae-mcp ${version} is not on PyPI; refusing to publish a dangling registry entry"
+          exit 1
+
+      - name: Download mcp-publisher
+        run: |
+          set -euo pipefail
+          tag="$(curl -sL https://api.github.com/repos/modelcontextprotocol/registry/releases/latest \
+                 | python -c 'import json,sys;print(json.load(sys.stdin)["tag_name"])')"
+          echo "mcp-publisher release: ${tag}"
+          curl -sL -o publisher.tar.gz \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${tag}/mcp-publisher_linux_amd64.tar.gz"
+          tar -xzf publisher.tar.gz mcp-publisher
+          chmod +x mcp-publisher
+          ./mcp-publisher --help | head -5
+
+      - name: Validate server.json
+        run: ./mcp-publisher validate server.json
+
+      - name: Publish to the MCP Registry
+        run: |
+          set -euo pipefail
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish server.json
+
+      - name: Read back the published entry
+        run: |
+          name="$(python -c "import json;print(json.load(open('server.json'))['name'])")"
+          curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=${name}" \
+            | python -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps(d, indent=2)[:2000])'
