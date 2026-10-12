@@ -1,5 +1,22 @@
 # CHANGES
 
+## 0.2.4 — 2026-10-12
+
+- **L0 白名单补上 Windows 上真正存在的 Python 形态**：`whitelist_prefix` 里原来只有
+  `python3 -m pytest`，而 Windows 上没有 `python3` 这个名字（python.org 装的是
+  `python`，Git Bash 里也一样）。于是 `python -m pytest -q` —— Windows 上跑测试最
+  常见的写法 —— L0 判不了、落到灰区，在 L1 关闭（文档默认）下 fail-closed 成 deny。
+  现在同时带 `python -m pytest` / `python3 -m pytest` / `python -m unittest`。
+- 发现方式：**跑 PyPI 上发布的 0.1.3/0.2.2 wheel**，而不是跑源码目录。源码 checkout
+  里 `python3` 与 `python` 的差异不会自己暴露出来。
+- 放宽白名单的安全性核对：`_segment_hit` 是
+  `text == prefix or text.startswith(prefix + " ")`，按 token 边界锚定 ——
+  `python -m pytestx` 仍然"判不了"而不是放行，`python -m pytest; rm -rf /` 仍然
+  deny（先按段切分，第二段命中黑名单）。**刻意不加 `python -m pip`**：安装类命令
+  属于灰区，不该进白名单。
+- 随包 `l0_table.json` 与 guard 的 `DEFAULT_L0` 两处同步更新；
+  `tests/test_l0_parity.py` 33/33 保证两份不漂移。
+
 ## 0.2.3 — 2026-10-12
 
 - **修复「普通 pip 安装后 gate 不可用」**：实测 PyPI 上的 0.2.2 wheel + 真实 MCP

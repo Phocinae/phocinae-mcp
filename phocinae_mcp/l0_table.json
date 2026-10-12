@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "phocinae-guard L0 确定性表：whitelist=精确放行；whitelist_prefix=前缀放行；blacklist=[name, 正则, 说明] 先于白名单判定（deny 优先）。默认**合并**语义：文件各节追加到内置默认对应节（自定义一条规则不会再丢掉内置的 rm -rf / 等拦截）；要旧版整节替换语义时显式写 \"replace\": true（顶层，对三节都生效）或 \"<节名>_replace\": true（如 blacklist_replace）。判定细节：黑名单对原串+归一化串+每个命令段都跑；白名单要求每一段都命中；换行/CRLF/引号外制表符视为命令分隔符。",
+  "note": "phocinae-guard L0 确定性表：whitelist=精确放行；whitelist_prefix=前缀放行；blacklist=[name, 正则, 说明] 先于白名单判定（deny 优先）。默认**合并**语义：文件各节追加到内置默认对应节（自定义一条规则不会再丢掉内置的 rm -rf / 等拦截）；要旧版整节替换语义时显式写 \"replace\": true（顶层，对三节都生效）或 \"<节名>_replace\": true（如 blacklist_replace）。判定细节：黑名单对原串+归一化串+每个命令段都跑；白名单要求每一段都命中；换行/CRLF/引号外制表符视为命令分隔符。 / 0.1.4: 补 python(非 python3) 的 -m pytest/-m unittest 前缀（Windows 无 python3）",
   "whitelist": [
     "ls",
     "ls -a",
@@ -69,6 +69,7 @@
     "git shortlog",
     "git blame",
     "python3 -m pytest",
+    "python -m pytest",
     "pytest",
     "python -m unittest",
     "npm test",

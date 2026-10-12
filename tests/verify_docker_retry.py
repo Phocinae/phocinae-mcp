@@ -32,7 +32,7 @@ def _force_utf8_stdio():
 _force_utf8_stdio()
 
 
-IMAGE = sys.argv[1] if len(sys.argv) > 1 else "phocinae-mcp:0.2.3"
+IMAGE = sys.argv[1] if len(sys.argv) > 1 else "phocinae-mcp:0.2.4"
 ATTEMPTS = 12
 
 
