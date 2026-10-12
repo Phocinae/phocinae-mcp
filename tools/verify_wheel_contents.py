@@ -54,9 +54,19 @@ def main():
                     help="defaults to GITHUB_REF_NAME with a leading v stripped")
     args = ap.parse_args()
 
-    paths = glob.glob(args.wheel)
+    paths = sorted(glob.glob(args.wheel))
     if not paths:
         print("FAIL no wheel matched %r" % args.wheel)
+        return 1
+    if len(paths) > 1:
+        # 取第一个是**字典序**第一个，不一定是要发布的那个。实测：本地 dist-upload/
+        # 里留着上一版时，这个检查去验了旧 wheel，然后报出"版本不匹配" ——
+        # 把人引向错误的方向。歧义必须显式解决。
+        print("FAIL %d wheels matched %r; refusing to guess which one is being published:"
+              % (len(paths), args.wheel))
+        for x in paths:
+            print("       %s" % os.path.basename(x))
+        print("     clean the output directory, or pass an exact path")
         return 1
     whl = paths[0]
     print("wheel: %s" % os.path.basename(whl))

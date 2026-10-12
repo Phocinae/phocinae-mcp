@@ -32,9 +32,9 @@ MCP 客户端。**纯标准库**（Python ≥ 3.8，零第三方依赖），支�
 | 工具 | 作用 | 输入 | 输出 |
 |------|------|------|------|
 | `gate` | 判定 shell 命令能否执行 | `command`、`cwd?`、`server?` | `decision` ∈ allow/deny/ask + `layer`/`reason` |
-| `classify` | 把状态归入候选标签之一 | `state`、`labels` | `choice`（下标）+ `label` |
-| `route` | 从候选工具中选最合适的一个 | `state`、`tools` | `choice` + `tool` |
-| `score` | 按标准给状态打 2–10 分 | `state`、`criteria` | `score` + `range` |
+| `classify` | 把状态归入候选标签之一 | `state`、`labels`、`server?` | `choice`（下标）+ `label` |
+| `route` | 从候选工具中选最合适的一个 | `state`、`tools`、`server?` | `choice` + `tool` |
+| `score` | 按标准给状态打 2–10 分 | `state`、`criteria`、`server?` | `score` + `range` |
 
 **fail-closed**：斑海豹 P0 服务（`/v1/systemone`）不可用、超时、应答异常时，
 `gate` 一律返回 `deny`（带原因），`classify`/`route`/`score` 返回 `isError: true`。
