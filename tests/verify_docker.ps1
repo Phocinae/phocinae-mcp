@@ -10,12 +10,34 @@
 # the server starts and answers introspection requests, and stdout carries only
 # JSON-RPC frames.
 #
-# Usage:  pwsh -File tests/verify_docker.ps1 [-Image phocinae-mcp:0.2.1]
+# Usage:  pwsh -File tests/verify_docker.ps1 [-Image phocinae-mcp:<version>]
+#
+# The image tag defaults to the version the Dockerfile pins, read from
+# `ARG PHOCINAE_MCP_VERSION=...`. It used to be a literal, which produced a false
+# pass: the default stayed at 0.2.1 after the release moved on, that image was
+# still present locally, and the run reported 13 green checks against a stale
+# container while appearing to verify the current release. Reading the pin means
+# the tag cannot drift away from what the Dockerfile actually builds.
 
-param([string]$Image = "phocinae-mcp:0.2.1")
+param([string]$Image)
 
 $ErrorActionPreference = "Continue"
 $fails = @()
+
+if (-not $Image) {
+    $dockerfile = Join-Path (Split-Path $PSScriptRoot -Parent) "Dockerfile"
+    $pin = $null
+    if (Test-Path $dockerfile) {
+        $m = Select-String -Path $dockerfile -Pattern 'ARG\s+PHOCINAE_MCP_VERSION=([0-9][0-9A-Za-z.\-]*)'
+        if ($m) { $pin = $m.Matches[0].Groups[1].Value }
+    }
+    if (-not $pin) {
+        Write-Output "FAIL could not read PHOCINAE_MCP_VERSION from $dockerfile"
+        exit 1
+    }
+    $Image = "phocinae-mcp:$pin"
+}
+Write-Output "image under test: $Image"
 
 function Check($name, $cond, $detail) {
     if ($cond) {
