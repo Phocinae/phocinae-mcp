@@ -18,7 +18,7 @@
 FROM python:3.12-slim
 
 # Pin the release so a directory check months from now tests the same artifact.
-ARG PHOCINAE_MCP_VERSION=0.2.1
+ARG PHOCINAE_MCP_VERSION=0.2.2
 # Point the server at a host-side decision service when one is available.
 # 127.0.0.1 is the documented default and is correct for a local client that
 # runs the server as a subprocess; inside a container that address is the

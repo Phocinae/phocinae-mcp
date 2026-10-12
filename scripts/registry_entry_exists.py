@@ -12,7 +12,7 @@ python -c 的多行脚本与 shell 变量替换，既难以阅读，也容易把
 写坏（实测导致 GitHub 直接以 422 拒绝 dispatch）。
 
 用法：
-    python scripts/registry_entry_exists.py io.github.Phocinae/phocinae-mcp 0.2.1
+    python scripts/registry_entry_exists.py io.github.Phocinae/phocinae-mcp 0.2.2
 退出码：0 = 已存在；1 = 不存在；2 = 查询失败（网络/结构异常）
 
 2 的处理方式：调用方（workflow）应把它当作「未知」并继续尝试发布，而不是

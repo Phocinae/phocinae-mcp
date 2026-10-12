@@ -1,5 +1,23 @@
 # CHANGES
 
+## 0.2.2 — 2026-10-12
+
+- **修复测试套件在非 UTF-8 控制台上自杀**：`tests/test_mcp.py` 通过全部 42 项检查后，
+  在**最后一行汇总**打印 `→` 时抛 `UnicodeEncodeError: 'charmap' codec can't encode
+  character '\u2192'`（GitHub Actions 的 windows runner 控制台是 cp1252），
+  于是整个 job 报红 —— 与套件实际测的东西无关。三个测试脚本现在各自把
+  stdout/stderr 固定为 UTF-8（`stream.reconfigure`），CI 另设 `PYTHONUTF8=1` 兜住
+  pip/build 与子进程的输出。
+- **CI 的 Python 矩阵由 `['3.8', '3.12']` 改为 `['3.10', '3.12']`**：
+  `actions/setup-python` 在 windows-latest 上对 3.8/3.9 反复取不到缓存，
+  在跑任何测试之前就把 job 拖红。包声明的最低 Python 版本未变。
+- 新增 `tests/verify_docker.py` / `verify_docker.ps1`：按 MCP 目录（Glama 等）
+  的检查口径验证容器镜像 —— 起得来、`initialize` 与 `tools/list` 有应答、
+  四个工具都带 `inputSchema`/`description`、**stdout 只含 JSON-RPC 帧**。
+- 新增 `Dockerfile` + `.dockerignore`：MCP 目录的收录检查要求仓库内有 Dockerfile。
+  镜像从 PyPI 装已发布版本，入口是 stdio（无端口、无参数）。
+- `server.json` 与 Dockerfile 的版本引用同步到 0.2.2。
+
 ## 0.2.1 — 2026-10-11
 
 - README 顶部加入 MCP Registry 的归属令牌 `mcp-name: io.github.Phocinae/phocinae-mcp`。
