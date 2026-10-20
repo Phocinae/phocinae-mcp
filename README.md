@@ -24,6 +24,19 @@ MCP 客户端。**纯标准库**（Python ≥ 3.8，零第三方依赖），支�
 > 本仓库为本地增强版（基于 PyPI phocinae-mcp 0.1.1），仅用于本地开发与
 > 协议对齐验证，**不发布**。
 
+
+## Install (local enhanced build)
+
+```sh
+git clone https://github.com/Phocinae/phocinae-mcp.git
+cd phocinae-mcp
+python3 -m pip install .
+phocinae-mcp --help
+```
+
+This repository is a local enhanced build and is not the PyPI release; the registry entry and the package below refer to the same server contract.
+
+
 ## 工具
 
 <img src="docs/assets/S07_tool_routing.gif" width="720" alt="S07 演示动画">
